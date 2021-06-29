@@ -11,10 +11,9 @@ import (
 	"time"
 
 	dynatracev1alpha1 "github.com/Dynatrace/dynatrace-operator/api/v1alpha1"
-	"github.com/Dynatrace/dynatrace-operator/controllers/activegate"
+	"github.com/Dynatrace/dynatrace-operator/controllers/activegate/reconciler/statefulset"
 	"github.com/Dynatrace/dynatrace-operator/controllers/kubesystem"
 	"github.com/Dynatrace/dynatrace-operator/controllers/utils"
-	"github.com/Dynatrace/dynatrace-operator/dtclient"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,14 +40,12 @@ const (
 )
 
 // NewOneAgentReconciler initializes a new ReconcileOneAgent instance
-func NewOneAgentReconciler(client client.Client, apiReader client.Reader, scheme *runtime.Scheme, logger logr.Logger,
-	dtc dtclient.Client, instance *dynatracev1alpha1.DynaKube, fullStack *dynatracev1alpha1.FullStackSpec, feature string) *ReconcileOneAgent {
+func NewOneAgentReconciler(client client.Client, apiReader client.Reader, scheme *runtime.Scheme, logger logr.Logger, instance *dynatracev1alpha1.DynaKube, fullStack *dynatracev1alpha1.FullStackSpec, feature string) *ReconcileOneAgent {
 	return &ReconcileOneAgent{
 		client:    client,
 		apiReader: apiReader,
 		scheme:    scheme,
 		logger:    logger,
-		dtc:       dtc,
 		instance:  instance,
 		fullStack: fullStack,
 		feature:   feature,
@@ -66,7 +63,6 @@ type ReconcileOneAgent struct {
 	instance  *dynatracev1alpha1.DynaKube
 	fullStack *dynatracev1alpha1.FullStackSpec
 	feature   string
-	dtc       dtclient.Client
 }
 
 // Reconcile reads that state of the cluster for a OneAgent object and makes changes based on the state read
@@ -103,7 +99,7 @@ func (r *ReconcileOneAgent) Reconcile(ctx context.Context, rec *utils.Reconcilia
 		r.instance.Status.OneAgent.LastHostsRequestTimestamp = rec.Now.DeepCopy()
 		rec.Update(true, 5*time.Minute, "updated last host request time stamp")
 
-		upd, err := r.reconcileInstanceStatuses(ctx, r.logger, r.instance, r.dtc)
+		upd, err = r.reconcileInstanceStatuses(ctx, r.logger, r.instance)
 		rec.Update(upd, 5*time.Minute, "Instance statuses reconciled")
 		if rec.Error(err) {
 			return false, err
@@ -124,7 +120,7 @@ func (r *ReconcileOneAgent) reconcileRollout(ctx context.Context, rec *utils.Rec
 	dsDesired, err := r.getDesiredDaemonSet(rec)
 	if err != nil {
 		rec.Log.Info("Failed to get desired daemonset")
-		return updateCR, err
+		return false, err
 	}
 
 	// Set OneAgent instance as the owner and controller
@@ -206,7 +202,7 @@ func newDaemonSetForCR(logger logr.Logger, instance *dynatracev1alpha1.DynaKube,
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: mergedLabels,
 					Annotations: map[string]string{
-						activegate.AnnotationVersion: instance.Status.OneAgent.Version,
+						statefulset.AnnotationVersion: instance.Status.OneAgent.Version,
 					},
 				},
 				Spec: podSpec,
@@ -227,7 +223,7 @@ func newDaemonSetForCR(logger logr.Logger, instance *dynatracev1alpha1.DynaKube,
 	if err != nil {
 		return nil, err
 	}
-	ds.Annotations[activegate.AnnotationTemplateHash] = dsHash
+	ds.Annotations[statefulset.AnnotationTemplateHash] = dsHash
 
 	return ds, nil
 }
@@ -593,12 +589,12 @@ func generateDaemonSetHash(ds *appsv1.DaemonSet) (string, error) {
 
 func getTemplateHash(a metav1.Object) string {
 	if annotations := a.GetAnnotations(); annotations != nil {
-		return annotations[activegate.AnnotationTemplateHash]
+		return annotations[statefulset.AnnotationTemplateHash]
 	}
 	return ""
 }
 
-func (r *ReconcileOneAgent) reconcileInstanceStatuses(ctx context.Context, logger logr.Logger, instance *dynatracev1alpha1.DynaKube, dtc dtclient.Client) (bool, error) {
+func (r *ReconcileOneAgent) reconcileInstanceStatuses(ctx context.Context, logger logr.Logger, instance *dynatracev1alpha1.DynaKube) (bool, error) {
 	pods, listOpts, err := r.getPods(ctx, instance, r.feature)
 	if err != nil {
 		handlePodListError(logger, err, listOpts)

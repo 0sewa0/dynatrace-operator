@@ -11,7 +11,7 @@ import (
 
 func (gc *CSIGarbageCollector) runBinaryGarbageCollection(versionReferences []os.FileInfo, tenantUUID string, latestVersion string) error {
 	fs := &afero.Afero{Fs: gc.fs}
-	versionReferencesBase := filepath.Join(gc.opts.RootDir, dtcsi.DataPath, tenantUUID, dtcsi.GarbageCollectionPath)
+	versionReferencesBase := filepath.Join(gc.opts.RootDir, tenantUUID, dtcsi.GarbageCollectionPath)
 	gc.logger.Info("run garbage collection for binaries", "versionReferencesBase", versionReferencesBase)
 
 	for _, fileInfo := range versionReferences {
@@ -22,7 +22,7 @@ func (gc *CSIGarbageCollector) runBinaryGarbageCollection(versionReferences []os
 			shouldDeleteVersion(fs, references, gc.logger.WithValues("version", version))
 
 		if shouldDelete {
-			binaryPath := filepath.Join(gc.opts.RootDir, dtcsi.DataPath, tenantUUID, "bin", version)
+			binaryPath := filepath.Join(gc.opts.RootDir, tenantUUID, "bin", version)
 			gc.logger.Info("deleting unused version", "version", version, "path", binaryPath)
 
 			removeUnusedVersion(fs, binaryPath, references, gc.logger)
