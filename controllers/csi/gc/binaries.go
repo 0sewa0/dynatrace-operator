@@ -6,13 +6,19 @@ import (
 
 	dtcsi "github.com/Dynatrace/dynatrace-operator/controllers/csi"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 )
 
-func (gc *CSIGarbageCollector) runBinaryGarbageCollection(versionReferences []os.FileInfo, tenantUUID string, latestVersion string) error {
+func (gc *CSIGarbageCollector) runBinaryGarbageCollection(tenantUUID string, latestVersion string) {
 	fs := &afero.Afero{Fs: gc.fs}
+	versionReferences, err := gc.getVersionReferences(tenantUUID)
+	if err != nil {
+		gc.logger.Info("failed to get version references", "error", err)
+		return
+	}
+
 	versionReferencesBase := filepath.Join(gc.opts.RootDir, tenantUUID, dtcsi.GarbageCollectionPath)
-	gc.logger.Info("run garbage collection for binaries", "versionReferencesBase", versionReferencesBase)
 
 	for _, fileInfo := range versionReferences {
 		version := fileInfo.Name()
@@ -28,14 +34,29 @@ func (gc *CSIGarbageCollector) runBinaryGarbageCollection(versionReferences []os
 			removeUnusedVersion(fs, binaryPath, references, gc.logger)
 		}
 	}
+}
 
-	return nil
+func (gc *CSIGarbageCollector) getVersionReferences(tenantUUID string) ([]os.FileInfo, error) {
+	fs := &afero.Afero{Fs: gc.fs}
+
+	versionReferencesBase := filepath.Join(gc.opts.RootDir, tenantUUID, dtcsi.GarbageCollectionPath)
+	versionReferences, err := fs.ReadDir(versionReferencesBase)
+	if err != nil {
+		exists, _ := fs.DirExists(versionReferencesBase)
+		if !exists {
+			gc.logger.Info("skipped, version reference base directory not exists", "path", versionReferencesBase)
+			return nil, nil
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	return versionReferences, nil
 }
 
 func shouldDeleteVersion(fs *afero.Afero, references string, logger logr.Logger) bool {
 	podReferences, err := fs.ReadDir(references)
 	if err != nil {
-		logger.Error(err, "skipped, failed to get references")
+		logger.Info("skipped, failed to get references", "error", err)
 		return false
 
 	} else if len(podReferences) > 0 {
