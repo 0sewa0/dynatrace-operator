@@ -1,355 +1,344 @@
 package csidriver
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"io/fs"
-// 	"os"
-// 	"path/filepath"
-// 	"testing"
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
 
-// 	"github.com/Dynatrace/dynatrace-operator/api/v1alpha1"
-// 	dtcsi "github.com/Dynatrace/dynatrace-operator/controllers/csi"
-// 	"github.com/Dynatrace/dynatrace-operator/scheme/fake"
-// 	"github.com/Dynatrace/dynatrace-operator/webhook"
-// 	"github.com/container-storage-interface/spec/lib/go/csi"
-// 	logr "github.com/go-logr/logr/testing"
-// 	"github.com/prometheus/client_golang/prometheus/testutil"
-// 	"github.com/spf13/afero"
-// 	"github.com/stretchr/testify/assert"
-// 	"github.com/stretchr/testify/require"
-// 	v1 "k8s.io/api/core/v1"
-// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"k8s.io/utils/mount"
-// 	"sigs.k8s.io/controller-runtime/pkg/client"
-// )
+	"github.com/Dynatrace/dynatrace-operator/api/v1alpha1"
+	dtcsi "github.com/Dynatrace/dynatrace-operator/controllers/csi"
+	"github.com/Dynatrace/dynatrace-operator/controllers/csi/storage"
+	"github.com/Dynatrace/dynatrace-operator/scheme/fake"
+	"github.com/Dynatrace/dynatrace-operator/webhook"
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	logr "github.com/go-logr/logr/testing"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/mount"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
-// const (
-// 	testTargetNotExist   = "not-exists"
-// 	testTargetError      = "error"
-// 	testTargetNotMounted = "not-mounted"
-// 	testTargetMounted    = "mounted"
-// 	testTargetPath       = "/path/to/container/filesystem/opt/dynatrace/oneagent-paas"
+const (
+	testTargetNotExist   = "not-exists"
+	testTargetError      = "error"
+	testTargetNotMounted = "not-mounted"
+	testTargetMounted    = "mounted"
+	testTargetPath       = "/path/to/container/filesystem/opt/dynatrace/oneagent-paas"
 
-// 	testError = "test error message"
-// )
+	testError = "test error message"
+)
 
-// type fakeMounter struct {
-// 	mount.FakeMounter
-// }
+type fakeMounter struct {
+	mount.FakeMounter
+}
 
-// func (*fakeMounter) IsLikelyNotMountPoint(target string) (bool, error) {
-// 	if target == testTargetNotExist {
-// 		return false, os.ErrNotExist
-// 	} else if target == testTargetError {
-// 		return false, fmt.Errorf(testError)
-// 	} else if target == testTargetMounted {
-// 		return true, nil
-// 	}
-// 	return false, nil
-// }
+func (*fakeMounter) IsLikelyNotMountPoint(target string) (bool, error) {
+	if target == testTargetNotExist {
+		return false, os.ErrNotExist
+	} else if target == testTargetError {
+		return false, fmt.Errorf(testError)
+	} else if target == testTargetMounted {
+		return true, nil
+	}
+	return false, nil
+}
 
-// func TestCSIDriverServer_IsMounted(t *testing.T) {
-// 	t.Run(`mount point does not exist`, func(t *testing.T) {
-// 		mounted, err := isMounted(&fakeMounter{}, testTargetNotExist)
-// 		assert.NoError(t, err)
-// 		assert.False(t, mounted)
-// 	})
-// 	t.Run(`mounter throws error`, func(t *testing.T) {
-// 		mounted, err := isMounted(&fakeMounter{}, testTargetError)
+func TestCSIDriverServer_IsMounted(t *testing.T) {
+	t.Run(`mount point does not exist`, func(t *testing.T) {
+		mounted, err := isMounted(&fakeMounter{}, testTargetNotExist)
+		assert.NoError(t, err)
+		assert.False(t, mounted)
+	})
+	t.Run(`mounter throws error`, func(t *testing.T) {
+		mounted, err := isMounted(&fakeMounter{}, testTargetError)
 
-// 		assert.EqualError(t, err, "rpc error: code = Internal desc = test error message")
-// 		assert.False(t, mounted)
-// 	})
-// 	t.Run(`mount point is not mounted`, func(t *testing.T) {
-// 		mounted, err := isMounted(&fakeMounter{}, testTargetNotMounted)
+		assert.EqualError(t, err, "rpc error: code = Internal desc = test error message")
+		assert.False(t, mounted)
+	})
+	t.Run(`mount point is not mounted`, func(t *testing.T) {
+		mounted, err := isMounted(&fakeMounter{}, testTargetNotMounted)
 
-// 		assert.NoError(t, err)
-// 		assert.True(t, mounted)
-// 	})
-// 	t.Run(`mount point is mounted`, func(t *testing.T) {
-// 		mounted, err := isMounted(&fakeMounter{}, testTargetMounted)
+		assert.NoError(t, err)
+		assert.True(t, mounted)
+	})
+	t.Run(`mount point is mounted`, func(t *testing.T) {
+		mounted, err := isMounted(&fakeMounter{}, testTargetMounted)
 
-// 		assert.NoError(t, err)
-// 		assert.False(t, mounted)
-// 	})
-// }
+		assert.NoError(t, err)
+		assert.False(t, mounted)
+	})
+}
 
-// func TestCSIDriverServer_parseEndpoint(t *testing.T) {
-// 	t.Run(`valid unix endpoint`, func(t *testing.T) {
-// 		testEndpoint := "unix:///some/socket"
-// 		protocol, address, err := parseEndpoint(testEndpoint)
+func TestCSIDriverServer_parseEndpoint(t *testing.T) {
+	t.Run(`valid unix endpoint`, func(t *testing.T) {
+		testEndpoint := "unix:///some/socket"
+		protocol, address, err := parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "unix", protocol)
-// 		assert.Equal(t, "/some/socket", address)
+		assert.NoError(t, err)
+		assert.Equal(t, "unix", protocol)
+		assert.Equal(t, "/some/socket", address)
 
-// 		testEndpoint = "UNIX:///SOME/socket"
-// 		protocol, address, err = parseEndpoint(testEndpoint)
+		testEndpoint = "UNIX:///SOME/socket"
+		protocol, address, err = parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "UNIX", protocol)
-// 		assert.Equal(t, "/SOME/socket", address)
+		assert.NoError(t, err)
+		assert.Equal(t, "UNIX", protocol)
+		assert.Equal(t, "/SOME/socket", address)
 
-// 		testEndpoint = "uNiX:///SOME/socket://weird-uri"
-// 		protocol, address, err = parseEndpoint(testEndpoint)
+		testEndpoint = "uNiX:///SOME/socket://weird-uri"
+		protocol, address, err = parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "uNiX", protocol)
-// 		assert.Equal(t, "/SOME/socket://weird-uri", address)
-// 	})
-// 	t.Run(`valid tcp endpoint`, func(t *testing.T) {
-// 		testEndpoint := "tcp://127.0.0.1/some/endpoint"
-// 		protocol, address, err := parseEndpoint(testEndpoint)
+		assert.NoError(t, err)
+		assert.Equal(t, "uNiX", protocol)
+		assert.Equal(t, "/SOME/socket://weird-uri", address)
+	})
+	t.Run(`valid tcp endpoint`, func(t *testing.T) {
+		testEndpoint := "tcp://127.0.0.1/some/endpoint"
+		protocol, address, err := parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "tcp", protocol)
-// 		assert.Equal(t, "127.0.0.1/some/endpoint", address)
+		assert.NoError(t, err)
+		assert.Equal(t, "tcp", protocol)
+		assert.Equal(t, "127.0.0.1/some/endpoint", address)
 
-// 		testEndpoint = "TCP:///localhost/some/ENDPOINT"
-// 		protocol, address, err = parseEndpoint(testEndpoint)
+		testEndpoint = "TCP:///localhost/some/ENDPOINT"
+		protocol, address, err = parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "TCP", protocol)
-// 		assert.Equal(t, "/localhost/some/ENDPOINT", address)
+		assert.NoError(t, err)
+		assert.Equal(t, "TCP", protocol)
+		assert.Equal(t, "/localhost/some/ENDPOINT", address)
 
-// 		testEndpoint = "tCp://localhost/some/ENDPOINT://weird-uri"
-// 		protocol, address, err = parseEndpoint(testEndpoint)
+		testEndpoint = "tCp://localhost/some/ENDPOINT://weird-uri"
+		protocol, address, err = parseEndpoint(testEndpoint)
 
-// 		assert.NoError(t, err)
-// 		assert.Equal(t, "tCp", protocol)
-// 		assert.Equal(t, "localhost/some/ENDPOINT://weird-uri", address)
-// 	})
-// 	t.Run(`invalid endpoint`, func(t *testing.T) {
-// 		testEndpoint := "udp://website.com/some/endpoint"
-// 		protocol, address, err := parseEndpoint(testEndpoint)
+		assert.NoError(t, err)
+		assert.Equal(t, "tCp", protocol)
+		assert.Equal(t, "localhost/some/ENDPOINT://weird-uri", address)
+	})
+	t.Run(`invalid endpoint`, func(t *testing.T) {
+		testEndpoint := "udp://website.com/some/endpoint"
+		protocol, address, err := parseEndpoint(testEndpoint)
 
-// 		assert.EqualError(t, err, "invalid endpoint: "+testEndpoint)
-// 		assert.Equal(t, "", protocol)
-// 		assert.Equal(t, "", address)
-// 	})
-// }
+		assert.EqualError(t, err, "invalid endpoint: "+testEndpoint)
+		assert.Equal(t, "", protocol)
+		assert.Equal(t, "", address)
+	})
+}
 
-// func TestServer_NodePublishVolume(t *testing.T) {
-// 	mounter := mount.NewFakeMounter([]mount.MountPoint{})
-// 	server := newServerForTesting(t, mounter)
-// 	nodePublishVolumeRequest := &csi.NodePublishVolumeRequest{
-// 		VolumeId: volumeId,
-// 		VolumeContext: map[string]string{
-// 			podNamespaceContextKey: namespace,
-// 		},
-// 		TargetPath: testTargetPath,
-// 		VolumeCapability: &csi.VolumeCapability{
-// 			AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
-// 		},
-// 	}
-// 	mockOneAgent(t, &server)
+func TestServer_NodePublishVolume(t *testing.T) {
+	mounter := mount.NewFakeMounter([]mount.MountPoint{})
+	server := newServerForTesting(t, mounter)
+	nodePublishVolumeRequest := &csi.NodePublishVolumeRequest{
+		VolumeId: volumeId,
+		VolumeContext: map[string]string{
+			podNamespaceContextKey: namespace,
+			podUIDContextKey:       podUID,
+		},
+		TargetPath: testTargetPath,
+		VolumeCapability: &csi.VolumeCapability{
+			AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
+		},
+	}
+	mockOneAgent(t, &server)
 
-// 	response, err := server.NodePublishVolume(context.TODO(), nodePublishVolumeRequest)
+	response, err := server.NodePublishVolume(context.TODO(), nodePublishVolumeRequest)
 
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, response)
-// 	assert.NotEmpty(t, mounter.MountPoints)
-// 	assertReferencesForPublishedVolume(t, mounter, server.fs)
-// }
+	assert.NoError(t, err)
+	assert.NotNil(t, response)
+	assert.NotEmpty(t, mounter.MountPoints)
+	assertReferencesForPublishedVolume(t, &server, mounter)
+}
 
-// func TestServer_NodeUnpublishVolume(t *testing.T) {
-// 	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{
-// 		VolumeId:   volumeId,
-// 		TargetPath: testTargetPath,
-// 	}
+func TestServer_NodeUnpublishVolume(t *testing.T) {
+	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{
+		VolumeId:   volumeId,
+		TargetPath: testTargetPath,
+	}
 
-// 	t.Run(`valid metadata`, func(t *testing.T) {
-// 		resetMetrics()
-// 		mounter := mount.NewFakeMounter([]mount.MountPoint{
-// 			{Path: testTargetPath},
-// 			{Path: fmt.Sprintf("/%s/run/%s/mapped", tenantUuid, volumeId)},
-// 		})
-// 		server := newServerForTesting(t, mounter)
-// 		mockPublishedVolume(t, &server)
+	t.Run(`valid metadata`, func(t *testing.T) {
+		resetMetrics()
+		mounter := mount.NewFakeMounter([]mount.MountPoint{
+			{Path: testTargetPath},
+			{Path: fmt.Sprintf("/%s/run/%s/mapped", tenantUuid, volumeId)},
+		})
+		server := newServerForTesting(t, mounter)
+		mockPublishedVolume(t, &server)
 
-// 		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
-// 		assert.Equal(t, float64(1), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
+		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
+		assert.Equal(t, float64(1), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
 
-// 		response, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
+		response, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
 
-// 		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
-// 		assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
+		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
+		assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
 
-// 		assert.NoError(t, err)
-// 		assert.NotNil(t, response)
-// 		assert.Empty(t, mounter.MountPoints)
-// 		assertNoReferencesForUnpublishedVolume(t, server.fs)
-// 	})
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Empty(t, mounter.MountPoints)
+		assertNoReferencesForUnpublishedVolume(t, &server)
+	})
 
-// 	t.Run(`invalid metadata`, func(t *testing.T) {
-// 		resetMetrics()
-// 		mounter := mount.NewFakeMounter([]mount.MountPoint{
-// 			{Path: testTargetPath},
-// 			{Path: fmt.Sprintf("/%s/run/%s/mapped", tenantUuid, volumeId)},
-// 		})
-// 		server := newServerForTesting(t, mounter)
+	t.Run(`invalid metadata`, func(t *testing.T) {
+		resetMetrics()
+		mounter := mount.NewFakeMounter([]mount.MountPoint{
+			{Path: testTargetPath},
+			{Path: fmt.Sprintf("/%s/run/%s/mapped", tenantUuid, volumeId)},
+		})
+		server := newServerForTesting(t, mounter)
 
-// 		response, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
+		response, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
 
-// 		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
-// 		assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
+		assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
+		assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
 
-// 		assert.NoError(t, err)
-// 		assert.NotNil(t, response)
-// 		assert.NotEmpty(t, mounter.MountPoints)
-// 		assertNoReferencesForUnpublishedVolume(t, server.fs)
-// 	})
-// }
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.NotEmpty(t, mounter.MountPoints)
+		assertNoReferencesForUnpublishedVolume(t, &server)
+	})
+}
 
-// func TestCSIDriverServer_NodePublishAndUnpublishVolume(t *testing.T) {
-// 	resetMetrics()
-// 	nodePublishVolumeRequest := &csi.NodePublishVolumeRequest{
-// 		VolumeId: volumeId,
-// 		VolumeContext: map[string]string{
-// 			podNamespaceContextKey: namespace,
-// 		},
-// 		TargetPath: testTargetPath,
-// 		VolumeCapability: &csi.VolumeCapability{
-// 			AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
-// 		},
-// 	}
-// 	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{
-// 		VolumeId:   volumeId,
-// 		TargetPath: testTargetPath,
-// 	}
-// 	mounter := mount.NewFakeMounter([]mount.MountPoint{})
-// 	server := newServerForTesting(t, mounter)
-// 	mockOneAgent(t, &server)
+func TestCSIDriverServer_NodePublishAndUnpublishVolume(t *testing.T) {
+	resetMetrics()
+	nodePublishVolumeRequest := &csi.NodePublishVolumeRequest{
+		VolumeId: volumeId,
+		VolumeContext: map[string]string{
+			podNamespaceContextKey: namespace,
+			podUIDContextKey:       podUID,
+		},
+		TargetPath: testTargetPath,
+		VolumeCapability: &csi.VolumeCapability{
+			AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
+		},
+	}
+	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{
+		VolumeId:   volumeId,
+		TargetPath: testTargetPath,
+	}
+	mounter := mount.NewFakeMounter([]mount.MountPoint{})
+	server := newServerForTesting(t, mounter)
+	mockOneAgent(t, &server)
 
-// 	publishResponse, err := server.NodePublishVolume(context.TODO(), nodePublishVolumeRequest)
+	publishResponse, err := server.NodePublishVolume(context.TODO(), nodePublishVolumeRequest)
 
-// 	assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
-// 	assert.Equal(t, float64(1), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
+	assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
+	assert.Equal(t, float64(1), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
 
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, publishResponse)
-// 	assert.NotEmpty(t, mounter.MountPoints)
-// 	assertReferencesForPublishedVolume(t, mounter, server.fs)
+	assert.NoError(t, err)
+	assert.NotNil(t, publishResponse)
+	assert.NotEmpty(t, mounter.MountPoints)
+	assertReferencesForPublishedVolume(t, &server, mounter)
 
-// 	unpublishResponse, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
+	unpublishResponse, err := server.NodeUnpublishVolume(context.TODO(), nodeUnpublishVolumeRequest)
 
-// 	assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
-// 	assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
+	assert.Equal(t, 1, testutil.CollectAndCount(agentsVersionsMetric))
+	assert.Equal(t, float64(0), testutil.ToFloat64(agentsVersionsMetric.WithLabelValues(agentVersion)))
 
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, unpublishResponse)
-// 	assert.Empty(t, mounter.MountPoints)
-// 	assertNoReferencesForUnpublishedVolume(t, server.fs)
-// }
+	assert.NoError(t, err)
+	assert.NotNil(t, unpublishResponse)
+	assert.Empty(t, mounter.MountPoints)
+	assertNoReferencesForUnpublishedVolume(t, &server)
+}
 
-// func TestCreateAndLoadVolumeMetadata(t *testing.T) {
-// 	mounter := mount.NewFakeMounter([]mount.MountPoint{})
-// 	server := newServerForTesting(t, mounter)
+func TestStoreAndLoadPodInfo(t *testing.T) {
+	mounter := mount.NewFakeMounter([]mount.MountPoint{})
+	server := newServerForTesting(t, mounter)
 
-// 	metadataPath := filepath.Join(server.opts.RootDir, dtcsi.GarbageCollectionPath)
-// 	err := server.fs.MkdirAll(metadataPath, os.ModePerm)
-// 	assert.NoError(t, err)
+	bindCfg := &bindConfig{
+		agentDir:   "",
+		envDir:     tenantUuid,
+		version:    agentVersion,
+		tenantUUID: tenantUuid,
+	}
 
-// 	bindCfg := &bindConfig{
-// 		agentDir:                    "",
-// 		envDir:                      tenantUuid,
-// 		version:                     agentVersion,
-// 		volumeToVersionReferenceDir: filepath.Join(tenantUuid, dtcsi.GarbageCollectionPath, agentVersion),
-// 	}
+	volumeCfg := volumeConfig{
+		volumeId:   volumeId,
+		targetPath: targetPath,
+		namespace:  namespace,
+		podUID:     podUID,
+	}
 
-// 	err = server.storeVolumeMetadata(bindCfg, volumeId)
-// 	assert.NoError(t, err)
+	err := server.storePodInfo(bindCfg, &volumeCfg)
+	assert.NoError(t, err)
+	pod, err := server.loadPodInfo(volumeCfg.volumeId)
+	assert.NoError(t, err)
+	assert.NotNil(t, pod)
+}
 
-// 	var metadata volumeMetadata
-// 	err = server.loadVolumeMetadata(filepath.Join(metadataPath, volumeId), &metadata)
-// 	assert.NoError(t, err)
-// 	assert.NotNil(t, metadata)
-// }
+func newServerForTesting(t *testing.T, mounter *mount.FakeMounter) CSIDriverServer {
+	objects := []client.Object{
+		&v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   namespace,
+				Labels: map[string]string{webhook.LabelInstance: dkName},
+			},
+		},
+		&v1alpha1.DynaKube{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: dkName,
+			},
+			Spec: v1alpha1.DynaKubeSpec{
+				CodeModules: v1alpha1.CodeModulesSpec{
+					Enabled: true,
+				},
+			},
+		},
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: dkName,
+			},
+		},
+	}
 
-// func newServerForTesting(t *testing.T, mounter *mount.FakeMounter) CSIDriverServer {
-// 	var err error
+	csiOptions := dtcsi.CSIOptions{RootDir: "/"}
 
-// 	objects := []client.Object{
-// 		&v1.Namespace{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:   namespace,
-// 				Labels: map[string]string{webhook.LabelInstance: dkName},
-// 			},
-// 		},
-// 		&v1alpha1.DynaKube{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name: dkName,
-// 			},
-// 			Spec: v1alpha1.DynaKubeSpec{
-// 				CodeModules: v1alpha1.CodeModulesSpec{
-// 					Enabled: true,
-// 				},
-// 			},
-// 		},
-// 		&v1.Secret{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name: dkName,
-// 			},
-// 		},
-// 	}
+	tmpFs := afero.NewMemMapFs()
 
-// 	csiOptions := dtcsi.CSIOptions{RootDir: "/"}
+	return CSIDriverServer{
+		client:  fake.NewClient(objects...),
+		log:     logr.TestLogger{T: t},
+		opts:    csiOptions,
+		fs:      afero.Afero{Fs: tmpFs},
+		mounter: mounter,
+		db:      storage.FakeMemoryDB(),
+	}
+}
 
-// 	tmpFs := afero.NewMemMapFs()
+func mockPublishedVolume(t *testing.T, server *CSIDriverServer) {
+	mockOneAgent(t, server)
+	err := server.db.InsertPodInfo(&storage.Pod{UID: podUID, VolumeID: volumeId, Version: agentVersion, TenantUUID: tenantUuid})
+	require.NoError(t, err)
+	agentsVersionsMetric.WithLabelValues(agentVersion).Inc()
+}
 
-// 	err = afero.WriteFile(tmpFs, filepath.Join(csiOptions.RootDir, "tenant-"+dkName), []byte(tenantUuid), os.ModePerm)
-// 	require.NoError(t, err)
+func mockOneAgent(t *testing.T, server *CSIDriverServer) {
+	err := server.db.InsertTenant(&storage.Tenant{UUID: tenantUuid, LatestVersion: agentVersion, Dynakube: dkName})
+	require.NoError(t, err)
+}
 
-// 	return CSIDriverServer{
-// 		client:  fake.NewClient(objects...),
-// 		log:     logr.TestLogger{T: t},
-// 		opts:    csiOptions,
-// 		fs:      afero.Afero{Fs: tmpFs},
-// 		mounter: mounter,
-// 	}
-// }
+func assertReferencesForPublishedVolume(t *testing.T, server *CSIDriverServer, mounter *mount.FakeMounter) {
+	assert.NotEmpty(t, mounter.MountPoints)
+	pod, err := server.loadPodInfo(volumeId)
+	assert.NoError(t, err)
+	assert.Equal(t, pod.UID, podUID)
+	assert.Equal(t, pod.VolumeID, volumeId)
+	assert.Equal(t, pod.Version, agentVersion)
+	assert.Equal(t, pod.TenantUUID, tenantUuid)
+}
 
-// func mockPublishedVolume(t *testing.T, server *CSIDriverServer) {
-// 	metadata := fmt.Sprintf("{\"OverlayFSPath\":\"/%s/run/%s\", \"UsageFilePath\":\"/%s/gc/%s/%s\"}", tenantUuid, volumeId, tenantUuid, agentVersion, volumeId)
+func assertNoReferencesForUnpublishedVolume(t *testing.T, server *CSIDriverServer) {
+	pod, err := server.loadPodInfo(volumeId)
+	assert.NoError(t, err)
+	assert.Equal(t, pod.UID, "")
+	assert.Equal(t, pod.VolumeID, volumeId)
+	assert.Equal(t, pod.Version, "")
+	assert.Equal(t, pod.TenantUUID, "")
+}
 
-// 	err := server.fs.WriteFile(filepath.Join(server.opts.RootDir, "gc", volumeId), []byte(metadata), os.ModePerm)
-// 	require.NoError(t, err)
-
-// 	agentsVersionsMetric.WithLabelValues(agentVersion).Inc()
-// }
-
-// func mockOneAgent(t *testing.T, server *CSIDriverServer) {
-// 	err := afero.WriteFile(server.fs, filepath.Join(server.opts.RootDir, tenantUuid, dtcsi.VersionDir), []byte(agentVersion), fs.FileMode(0755))
-// 	require.NoError(t, err)
-// }
-
-// func assertReferencesForPublishedVolume(t *testing.T, mounter *mount.FakeMounter, fs afero.Afero) {
-// 	assert.NotEmpty(t, mounter.MountPoints)
-
-// 	metadataPath := filepath.Join("/", "gc", volumeId)
-// 	exists, err := fs.Exists(metadataPath)
-// 	assert.NoError(t, err)
-// 	assert.True(t, exists)
-
-// 	versionReferencePath := filepath.Join("/", tenantUuid, "gc", agentVersion)
-// 	exists, err = fs.Exists(versionReferencePath)
-// 	assert.NoError(t, err)
-// 	assert.True(t, exists)
-// }
-
-// func assertNoReferencesForUnpublishedVolume(t *testing.T, fs afero.Afero) {
-// 	metadataPath := filepath.Join("/", "gc", volumeId)
-// 	exists, err := fs.Exists(metadataPath)
-// 	assert.NoError(t, err)
-// 	assert.False(t, exists)
-
-// 	versionReferencePath := filepath.Join("/", tenantUuid, "gc", agentVersion, volumeId)
-// 	exists, err = fs.Exists(versionReferencePath)
-// 	assert.NoError(t, err)
-// 	assert.False(t, exists)
-// }
-
-// func resetMetrics() {
-// 	agentsVersionsMetric.WithLabelValues(agentVersion).Set(0)
-// }
+func resetMetrics() {
+	agentsVersionsMetric.WithLabelValues(agentVersion).Set(0)
+}
