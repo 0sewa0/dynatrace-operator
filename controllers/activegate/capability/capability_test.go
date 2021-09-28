@@ -139,7 +139,7 @@ func Test_capabilityBase_GetCapabilityName(t *testing.T) {
 }
 
 func TestCalculateStatefulSetName(t *testing.T) {
-	c := NewKubeMonCapability(nil)
+	c := NewKubeMonCapability(false, nil)
 	const instanceName = "testinstance"
 
 	type args struct {
@@ -187,6 +187,7 @@ func TestNewKubeMonCapability(t *testing.T) {
 			},
 			want: &KubeMonCapability{
 				capabilityBase: capabilityBase{
+					enabled: true,
 					moduleName:     "kubemon",
 					capabilityName: "kubernetes_monitoring",
 					properties:     props,
@@ -227,7 +228,7 @@ func TestNewKubeMonCapability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewKubeMonCapability(tt.args.crProperties); !reflect.DeepEqual(got, tt.want) {
+			if got := NewKubeMonCapability(true, tt.args.crProperties); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewKubeMonCapability() = %v, want %v", got, tt.want)
 			}
 		})
@@ -254,6 +255,7 @@ func TestNewRoutingCapability(t *testing.T) {
 			},
 			want: &RoutingCapability{
 				capabilityBase: capabilityBase{
+					enabled: true,
 					moduleName:     "routing",
 					capabilityName: "MSGrouter",
 					properties:     props,
@@ -274,6 +276,7 @@ func TestNewRoutingCapability(t *testing.T) {
 			},
 			want: &RoutingCapability{
 				capabilityBase: capabilityBase{
+					enabled: true,
 					moduleName:     "routing",
 					capabilityName: "MSGrouter",
 					properties:     props,
@@ -290,7 +293,7 @@ func TestNewRoutingCapability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewRoutingCapability(tt.args.crProperties); !reflect.DeepEqual(got, tt.want) {
+			if got := NewRoutingCapability(true, tt.args.crProperties); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewRoutingCapability() = %v, want %v", got, tt.want)
 			}
 		})

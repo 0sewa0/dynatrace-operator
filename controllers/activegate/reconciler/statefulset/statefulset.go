@@ -1,19 +1,14 @@
 package statefulset
 
 import (
-	"fmt"
-
 	dynatracev1 "github.com/Dynatrace/dynatrace-operator/api/v1"
+	"github.com/Dynatrace/dynatrace-operator/controllers/activegate/capability"
 	"github.com/Dynatrace/dynatrace-operator/controllers/activegate/internal/events"
-	"github.com/Dynatrace/dynatrace-operator/controllers/customproperties"
 	"github.com/Dynatrace/dynatrace-operator/controllers/kubeobjects"
-	"github.com/Dynatrace/dynatrace-operator/deploymentmetadata"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -34,67 +29,47 @@ const (
 )
 
 type statefulSetProperties struct {
-	*dynatracev1.DynaKube
-	*dynatracev1.CapabilityProperties
-	customPropertiesHash    string
-	kubeSystemUID           types.UID
-	feature                 string
-	capabilityName          string
-	serviceAccountOwner     string
-	majorKubernetesVersion  string
-	minorKubernetesVersion  string
-	OnAfterCreateListener   []events.StatefulSetEvent
-	initContainersTemplates []corev1.Container
-	containerVolumeMounts   []corev1.VolumeMount
-	volumes                 []corev1.Volume
+	dk                     dynatracev1.DynaKube
+	capability             capability.Capability
+	customPropertiesHash   string
+	majorKubernetesVersion string
+	minorKubernetesVersion string
+	OnAfterCreateListener  []events.StatefulSetEvent
 }
 
-func NewStatefulSetProperties(instance *dynatracev1.DynaKube, capabilityProperties *dynatracev1.CapabilityProperties,
-	kubeSystemUID types.UID, customPropertiesHash string, feature string, capabilityName string, serviceAccountOwner string,
-	majorKubernetesVersion string, minorKubernetesVersion string, initContainers []corev1.Container,
-	containerVolumeMounts []corev1.VolumeMount, volumes []corev1.Volume) *statefulSetProperties {
-	if serviceAccountOwner == "" {
-		serviceAccountOwner = feature
-	}
+func NewStatefulSetProperties(dk dynatracev1.DynaKube, capability capability.Capability, customPropertiesHash string, majorKubernetesVersion string, minorKubernetesVersion string) *statefulSetProperties {
 
 	return &statefulSetProperties{
-		DynaKube:                instance,
-		CapabilityProperties:    capabilityProperties,
-		customPropertiesHash:    customPropertiesHash,
-		kubeSystemUID:           kubeSystemUID,
-		feature:                 feature,
-		capabilityName:          capabilityName,
-		serviceAccountOwner:     serviceAccountOwner,
-		majorKubernetesVersion:  majorKubernetesVersion,
-		minorKubernetesVersion:  minorKubernetesVersion,
-		OnAfterCreateListener:   []events.StatefulSetEvent{},
-		initContainersTemplates: initContainers,
-		containerVolumeMounts:   containerVolumeMounts,
-		volumes:                 volumes,
+		dk:                     dk,
+		capability:             capability,
+		customPropertiesHash:   customPropertiesHash,
+		majorKubernetesVersion: majorKubernetesVersion,
+		minorKubernetesVersion: minorKubernetesVersion,
+		OnAfterCreateListener:  []events.StatefulSetEvent{},
 	}
 }
 
-func CreateStatefulSet(stsProperties *statefulSetProperties) (*appsv1.StatefulSet, error) {
+func (stsProperties *statefulSetProperties) CreateStatefulSet() (*appsv1.StatefulSet, error) {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        stsProperties.Name + "-" + stsProperties.feature,
-			Namespace:   stsProperties.Namespace,
-			Labels:      buildLabels(stsProperties.DynaKube, stsProperties.feature, stsProperties.CapabilityProperties),
+			Name:        stsProperties.dk.Name + "-" + stsProperties.capability.GetModuleName(),
+			Namespace:   stsProperties.dk.Namespace,
+			Labels:      buildLabels(&stsProperties.dk, stsProperties.capability.GetModuleName(), stsProperties.capability.GetProperties()),
 			Annotations: map[string]string{},
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas:            stsProperties.Replicas,
+			Replicas:            stsProperties.capability.GetProperties().Replicas,
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			Selector:            &metav1.LabelSelector{MatchLabels: BuildLabelsFromInstance(stsProperties.DynaKube, stsProperties.feature)},
+			Selector:            &metav1.LabelSelector{MatchLabels: BuildLabelsFromInstance(&stsProperties.dk, stsProperties.capability.GetModuleName())},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: buildLabels(stsProperties.DynaKube, stsProperties.feature, stsProperties.CapabilityProperties),
+					Labels: buildLabels(&stsProperties.dk, stsProperties.capability.GetModuleName(), stsProperties.capability.GetProperties()),
 					Annotations: map[string]string{
-						AnnotationVersion:         stsProperties.Status.ActiveGate.Version,
+						AnnotationVersion:         stsProperties.dk.Status.ActiveGate.Version,
 						AnnotationCustomPropsHash: stsProperties.customPropertiesHash,
 					},
 				},
-				Spec: buildTemplateSpec(stsProperties),
+				Spec: stsProperties.buildTemplateSpec(),
 			},
 		}}
 
@@ -111,156 +86,17 @@ func CreateStatefulSet(stsProperties *statefulSetProperties) (*appsv1.StatefulSe
 	return sts, nil
 }
 
-func buildTemplateSpec(stsProperties *statefulSetProperties) corev1.PodSpec {
+func (stsProperties *statefulSetProperties) buildTemplateSpec() corev1.PodSpec {
 	return corev1.PodSpec{
-		Containers:     []corev1.Container{buildContainer(stsProperties)},
-		InitContainers: buildInitContainers(stsProperties),
-		// NodeSelector: something,
-		ServiceAccountName: determineServiceAccountName(stsProperties),
+		Containers:         stsProperties.capability.GetContainersTemplates(),
+		InitContainers:     stsProperties.capability.GetInitContainersTemplates(),
+		NodeSelector:       stsProperties.capability.GetProperties().NodeSelector,
+		ServiceAccountName: stsProperties.capability.GetServiceAccountName(),
 		Affinity:           affinity(stsProperties),
-		Tolerations:        stsProperties.Tolerations,
-		Volumes:            buildVolumes(stsProperties),
+		Tolerations:        stsProperties.capability.GetProperties().Tolerations,
+		Volumes:            stsProperties.capability.GetVolumes(),
 		ImagePullSecrets: []corev1.LocalObjectReference{
-			{Name: stsProperties.PullSecret()},
+			{Name: stsProperties.dk.PullSecret()},
 		},
 	}
-}
-
-func buildInitContainers(stsProperties *statefulSetProperties) []corev1.Container {
-	ics := stsProperties.initContainersTemplates
-
-	for idx := range ics {
-		ics[idx].Image = stsProperties.DynaKube.ActiveGateImage()
-		ics[idx].Resources = stsProperties.CapabilityProperties.Resources
-	}
-
-	return ics
-}
-
-func buildContainer(stsProperties *statefulSetProperties) corev1.Container {
-	return corev1.Container{
-		Name:            dynatracev1.OperatorName,
-		Image:           stsProperties.DynaKube.ActiveGateImage(),
-		Resources:       stsProperties.CapabilityProperties.Resources,
-		ImagePullPolicy: corev1.PullAlways,
-		Env:             buildEnvs(stsProperties),
-		VolumeMounts:    buildVolumeMounts(stsProperties),
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/rest/health",
-					Port:   intstr.IntOrString{IntVal: 9999},
-					Scheme: "HTTPS",
-				},
-			},
-			InitialDelaySeconds: 90,
-			PeriodSeconds:       15,
-			FailureThreshold:    3,
-		},
-	}
-}
-
-func buildVolumes(stsProperties *statefulSetProperties) []corev1.Volume {
-	var volumes []corev1.Volume
-
-	if !isCustomPropertiesNilOrEmpty(stsProperties.CustomProperties) {
-		valueFrom := determineCustomPropertiesSource(stsProperties)
-		volumes = append(volumes, corev1.Volume{
-			Name: customproperties.VolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: valueFrom,
-					Items: []corev1.KeyToPath{
-						{Key: customproperties.DataKey, Path: customproperties.DataPath},
-					}}}},
-		)
-	}
-
-	volumes = append(volumes, stsProperties.volumes...)
-
-	return volumes
-}
-
-func determineCustomPropertiesSource(stsProperties *statefulSetProperties) string {
-	if stsProperties.CustomProperties.ValueFrom == "" {
-		return fmt.Sprintf("%s-%s-%s", stsProperties.Name, stsProperties.serviceAccountOwner, customproperties.Suffix)
-	}
-	return stsProperties.CustomProperties.ValueFrom
-}
-
-func buildVolumeMounts(stsProperties *statefulSetProperties) []corev1.VolumeMount {
-	var volumeMounts []corev1.VolumeMount
-
-	if !isCustomPropertiesNilOrEmpty(stsProperties.CustomProperties) {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			ReadOnly:  true,
-			Name:      customproperties.VolumeName,
-			MountPath: customproperties.MountPath,
-			SubPath:   customproperties.DataPath,
-		})
-	}
-
-	volumeMounts = append(volumeMounts, stsProperties.containerVolumeMounts...)
-
-	return volumeMounts
-}
-
-func buildEnvs(stsProperties *statefulSetProperties) []corev1.EnvVar {
-	deploymentMetadata := deploymentmetadata.NewDeploymentMetadata(string(stsProperties.kubeSystemUID), deploymentmetadata.DeploymentTypeAG)
-
-	envs := []corev1.EnvVar{
-		{Name: DTCapabilities, Value: stsProperties.capabilityName},
-		{Name: DTIdSeedNamespace, Value: stsProperties.Namespace},
-		{Name: DTIdSeedClusterId, Value: string(stsProperties.kubeSystemUID)},
-		{Name: DTDeploymentMetadata, Value: deploymentMetadata.AsString()},
-	}
-	envs = append(envs, stsProperties.Env...)
-
-	if !isProxyNilOrEmpty(stsProperties.Spec.Proxy) {
-		envs = append(envs, buildProxyEnv(stsProperties.Spec.Proxy))
-	}
-	if stsProperties.Group != "" {
-		envs = append(envs, corev1.EnvVar{Name: DTGroup, Value: stsProperties.Group})
-	}
-	if stsProperties.Spec.NetworkZone != "" {
-		envs = append(envs, corev1.EnvVar{Name: DTNetworkZone, Value: stsProperties.Spec.NetworkZone})
-	}
-
-	return envs
-}
-
-func buildProxyEnv(proxy *dynatracev1.DynaKubeProxy) corev1.EnvVar {
-	if proxy.ValueFrom != "" {
-		return corev1.EnvVar{
-			Name: DTInternalProxy,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: proxy.ValueFrom},
-					Key:                  ProxySecretKey,
-				},
-			},
-		}
-	} else {
-		return corev1.EnvVar{
-			Name:  DTInternalProxy,
-			Value: proxy.Value,
-		}
-	}
-}
-
-func determineServiceAccountName(stsProperties *statefulSetProperties) string {
-	if stsProperties.ServiceAccountName == "" {
-		return serviceAccountPrefix + stsProperties.serviceAccountOwner
-	}
-	return stsProperties.ServiceAccountName
-}
-
-func isCustomPropertiesNilOrEmpty(customProperties *dynatracev1.DynaKubeValueSource) bool {
-	return customProperties == nil ||
-		(customProperties.Value == "" &&
-			customProperties.ValueFrom == "")
-}
-
-func isProxyNilOrEmpty(proxy *dynatracev1.DynaKubeProxy) bool {
-	return proxy == nil || (proxy.Value == "" && proxy.ValueFrom == "")
 }

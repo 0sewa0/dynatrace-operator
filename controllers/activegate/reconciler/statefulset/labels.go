@@ -11,6 +11,8 @@ const (
 	ValueActiveGate = "activegate"
 )
 
+// TODO: Move this into the capability
+
 func buildLabels(instance *dynatracev1.DynaKube, feature string, capabilityProperties *dynatracev1.CapabilityProperties) map[string]string {
 	return mergeLabels(instance.Labels,
 		BuildLabelsFromInstance(instance, feature),

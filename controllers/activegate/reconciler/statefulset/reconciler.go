@@ -25,31 +25,19 @@ import (
 )
 
 type Reconciler struct {
-	client.Client
+	Client 							client.Client
 	Instance                         *dynatracev1.DynaKube
 	apiReader                        client.Reader
 	scheme                           *runtime.Scheme
 	log                              logr.Logger
 	imageVersionProvider             dtversion.ImageVersionProvider
-	feature                          string
-	capabilityName                   string
-	serviceAccountOwner              string
-	capability                       *dynatracev1.CapabilityProperties
+	capability                       capability.Capability
 	onAfterStatefulSetCreateListener []events.StatefulSetEvent
-	initContainersTemplates          []corev1.Container
-	containerVolumeMounts            []corev1.VolumeMount
-	volumes                          []corev1.Volume
 	versionProvider                  kubesystem.VersionProvider
 }
 
 func NewReconciler(clt client.Client, apiReader client.Reader, scheme *runtime.Scheme, config *rest.Config, log logr.Logger,
 	instance *dynatracev1.DynaKube, imageVersionProvider dtversion.ImageVersionProvider, capability capability.Capability) *Reconciler {
-
-	serviceAccountOwner := capability.GetConfiguration().ServiceAccountOwner
-	if serviceAccountOwner == "" {
-		serviceAccountOwner = capability.GetModuleName()
-	}
-
 	return &Reconciler{
 		Client:                           clt,
 		apiReader:                        apiReader,
@@ -57,14 +45,8 @@ func NewReconciler(clt client.Client, apiReader client.Reader, scheme *runtime.S
 		log:                              log,
 		Instance:                         instance,
 		imageVersionProvider:             imageVersionProvider,
-		feature:                          capability.GetModuleName(),
-		capabilityName:                   capability.GetCapabilityName(),
-		serviceAccountOwner:              serviceAccountOwner,
-		capability:                       capability.GetProperties(),
+		capability:                       capability,
 		onAfterStatefulSetCreateListener: []events.StatefulSetEvent{},
-		initContainersTemplates:          capability.GetInitContainersTemplates(),
-		containerVolumeMounts:            capability.GetContainerVolumeMounts(),
-		volumes:                          capability.GetVolumes(),
 		versionProvider:                  kubesystem.NewVersionProvider(config),
 	}
 }
@@ -74,10 +56,15 @@ func (r *Reconciler) AddOnAfterStatefulSetCreateListener(event events.StatefulSe
 }
 
 func (r *Reconciler) Reconcile() (update bool, err error) {
-	if r.capability.CustomProperties != nil {
+	if r.capability.GetProperties().CustomProperties != nil {
 		err = customproperties.
-			NewReconciler(r, r.Instance, r.log, r.serviceAccountOwner, *r.capability.CustomProperties, r.scheme).
-			Reconcile()
+			NewReconciler(
+				r.Client,
+				r.Instance,
+				r.log,
+				r.capability.GetConfiguration().ServiceAccountOwner,
+				*r.capability.GetProperties().CustomProperties, r.scheme,
+			).Reconcile()
 		if err != nil {
 			r.log.Error(err, "could not reconcile custom properties")
 			return false, errors.WithStack(err)
@@ -121,11 +108,6 @@ func (r *Reconciler) manageStatefulSet() (bool, error) {
 }
 
 func (r *Reconciler) buildDesiredStatefulSet() (*appsv1.StatefulSet, error) {
-	kubeUID, err := kubesystem.GetUID(r.apiReader)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
 	cpHash, err := r.calculateCustomPropertyHash()
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -141,18 +123,16 @@ func (r *Reconciler) buildDesiredStatefulSet() (*appsv1.StatefulSet, error) {
 		r.log.Info("could not get minor kubernetes version", "error", err)
 	}
 
-	stsProperties := NewStatefulSetProperties(
-		r.Instance, r.capability, kubeUID, cpHash, r.feature, r.capabilityName, r.serviceAccountOwner,
-		major, minor, r.initContainersTemplates, r.containerVolumeMounts, r.volumes)
+	stsProperties := NewStatefulSetProperties(*r.Instance, r.capability, cpHash, major, minor)
 	stsProperties.OnAfterCreateListener = r.onAfterStatefulSetCreateListener
 
-	desiredSts, err := CreateStatefulSet(stsProperties)
+	desiredSts, err := stsProperties.CreateStatefulSet()
 	return desiredSts, errors.WithStack(err)
 }
 
 func (r *Reconciler) getStatefulSet(desiredSts *appsv1.StatefulSet) (*appsv1.StatefulSet, error) {
 	var sts appsv1.StatefulSet
-	err := r.Get(context.TODO(), client.ObjectKey{Name: desiredSts.Name, Namespace: desiredSts.Namespace}, &sts)
+	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: desiredSts.Name, Namespace: desiredSts.Namespace}, &sts)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -162,8 +142,8 @@ func (r *Reconciler) getStatefulSet(desiredSts *appsv1.StatefulSet) (*appsv1.Sta
 func (r *Reconciler) createStatefulSetIfNotExists(desiredSts *appsv1.StatefulSet) (bool, error) {
 	_, err := r.getStatefulSet(desiredSts)
 	if err != nil && k8serrors.IsNotFound(errors.Cause(err)) {
-		r.log.Info("creating new stateful set for " + r.feature)
-		return true, r.Create(context.TODO(), desiredSts)
+		r.log.Info("creating new stateful set for " + r.capability.GetModuleName())
+		return true, r.Client.Create(context.TODO(), desiredSts)
 	}
 	return false, err
 }
@@ -178,7 +158,7 @@ func (r *Reconciler) updateStatefulSetIfOutdated(desiredSts *appsv1.StatefulSet)
 	}
 
 	r.log.Info("updating existing stateful set")
-	if err = r.Update(context.TODO(), desiredSts); err != nil {
+	if err = r.Client.Update(context.TODO(), desiredSts); err != nil {
 		return false, err
 	}
 	return true, err
@@ -192,7 +172,7 @@ func (r *Reconciler) deleteStatefulSetIfOldLabelsAreUsed(desiredSts *appsv1.Stat
 
 	if !reflect.DeepEqual(currentSts.Labels, desiredSts.Labels) {
 		r.log.Info("Deleting existing stateful set")
-		if err = r.Delete(context.TODO(), desiredSts); err != nil {
+		if err = r.Client.Delete(context.TODO(), desiredSts); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -202,7 +182,7 @@ func (r *Reconciler) deleteStatefulSetIfOldLabelsAreUsed(desiredSts *appsv1.Stat
 }
 
 func (r *Reconciler) calculateCustomPropertyHash() (string, error) {
-	customProperties := r.capability.CustomProperties
+	customProperties := r.capability.GetProperties().CustomProperties
 	if customProperties == nil || (customProperties.Value == "" && customProperties.ValueFrom == "") {
 		return "", nil
 	}
@@ -224,7 +204,7 @@ func (r *Reconciler) getDataFromCustomProperty(customProperties *dynatracev1.Dyn
 	if customProperties.ValueFrom != "" {
 		namespace := r.Instance.Namespace
 		var secret corev1.Secret
-		err := r.Get(context.TODO(), client.ObjectKey{Name: customProperties.ValueFrom, Namespace: namespace}, &secret)
+		err := r.Client.Get(context.TODO(), client.ObjectKey{Name: customProperties.ValueFrom, Namespace: namespace}, &secret)
 		if err != nil {
 			return "", errors.WithStack(err)
 		}

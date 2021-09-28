@@ -51,7 +51,7 @@ func TestReconcile_UpdateImageVersion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: testName, Namespace: testNamespace},
 		Spec: dynatracev1.DynaKubeSpec{
 			KubernetesMonitoring: dynatracev1.KubernetesMonitoringSpec{
-				CapabilityProperties: dynatracev1.CapabilityProperties{Enabled: true},
+				Enabled: true,
 			},
 			OneAgent: dynatracev1.OneAgentSpec{
 				ClassicFullStack: &dynatracev1.ClassicFullStackSpec{},

@@ -59,17 +59,21 @@ func NewReconciler(capability capability.Capability, clt client.Client, apiReade
 
 func setReadinessProbePort() events.StatefulSetEvent {
 	return func(sts *appsv1.StatefulSet) {
-		sts.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port = intstr.FromString(consts.ServiceTargetPort)
+		for i := range sts.Spec.Template.Spec.Containers {
+			sts.Spec.Template.Spec.Containers[i].ReadinessProbe.HTTPGet.Port = intstr.FromString(consts.ServiceTargetPort)
+		}
 	}
 }
 
 func setCommunicationsPort(_ *dynatracev1.DynaKube) events.StatefulSetEvent {
 	return func(sts *appsv1.StatefulSet) {
-		sts.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
-			{
-				Name:          consts.ServiceTargetPort,
-				ContainerPort: containerPort,
-			},
+		for i := range sts.Spec.Template.Spec.Containers {
+			sts.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{
+				{
+					Name:          consts.ServiceTargetPort,
+					ContainerPort: containerPort,
+				},
+			}
 		}
 	}
 }
@@ -80,11 +84,13 @@ func (r *Reconciler) calculateStatefulSetName() string {
 
 func addDNSEntryPoint(instance *dynatracev1.DynaKube, moduleName string) events.StatefulSetEvent {
 	return func(sts *appsv1.StatefulSet) {
-		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env,
-			corev1.EnvVar{
-				Name:  dtDNSEntryPoint,
-				Value: buildDNSEntryPoint(instance, moduleName),
-			})
+		for i := range sts.Spec.Template.Spec.Containers {
+			sts.Spec.Template.Spec.Containers[i].Env = append(sts.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  dtDNSEntryPoint,
+					Value: buildDNSEntryPoint(instance, moduleName),
+				})
+		}
 	}
 }
 
@@ -107,14 +113,14 @@ func (r *Reconciler) Reconcile() (update bool, err error) {
 func (r *Reconciler) createServiceIfNotExists() (bool, error) {
 	service := createService(r.Instance, r.GetModuleName())
 
-	err := r.Get(context.TODO(), client.ObjectKey{Name: service.Name, Namespace: service.Namespace}, service)
+	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: service.Name, Namespace: service.Namespace}, service)
 	if err != nil && k8serrors.IsNotFound(err) {
 		r.log.Info("creating service", "module", r.GetModuleName())
-		if err := controllerutil.SetControllerReference(r.Instance, service, r.Scheme()); err != nil {
+		if err := controllerutil.SetControllerReference(r.Instance, service, r.Client.Scheme()); err != nil {
 			return false, errors.WithStack(err)
 		}
 
-		err = r.Create(context.TODO(), service)
+		err = r.Client.Create(context.TODO(), service)
 		return true, errors.WithStack(err)
 	}
 	return false, errors.WithStack(err)
