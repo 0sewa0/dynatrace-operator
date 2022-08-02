@@ -3,22 +3,16 @@ description: Builds the operator docker image
 inputs:
   platform:
     required: true
-    type: string
-  goversion:
+  go-version:
     required: true
-    type: string
-  golinkerargs:
+  go-linker-args:
     required: true
-    type: string
-  cgo_cflags:
+  cgo-cflags:
     required: true
-    type: string
   labels:
     required: true
-    type: string
   image-tag:
     required: true
-    type: string
 runs:
   using: "composite"
   steps:
@@ -31,7 +25,7 @@ runs:
       - name: Set up Golang
         uses: actions/setup-go@v2
         with:
-          go-version: ${{ inputs.goversion }}
+          go-version: ${{ inputs.go-version }}
       - name: Setup cache
         uses: actions/cache@v2
         with:
@@ -48,8 +42,8 @@ runs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           build-args: |
-            GO_LINKER_ARGS=${{ inputs.golinkerargs }}
-            CGO_CFLAGS=${{ inputs.cgo_cflags }}
+            GO_LINKER_ARGS=${{ inputs.go-linker-args }}
+            CGO_CFLAGS=${{ inputs.cgo-cflags }}
           context: .
           file: ./Dockerfile
           platforms: linux/${{ inputs.platform }}

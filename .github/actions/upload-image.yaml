@@ -3,19 +3,14 @@ description: Uploads the operator docker image to a registry
 inputs:
   platform:
     required: true
-    type: string
   labels:
     required: true
-    type: string
   version:
     required: true
-    type: string
   registry:
     required: true
-    type: string
   repository:
     required: true
-    type: string
 secrets:
   docker_repo_username:
     required: true
