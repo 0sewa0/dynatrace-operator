@@ -11,10 +11,9 @@ inputs:
     required: true
   repository:
     required: true
-secrets:
-  docker_repo_username:
+  docker-repo-username:
     required: true
-  docker_repo_password:
+  docker-repo-password:
     required: true
 runs:
   using: "composite"
@@ -27,8 +26,8 @@ runs:
       uses: docker/login-action@v1
       with:
         registry: ${{ inputs.registry }}
-        username: ${{ secrets.docker_repo_username }}
-        password: ${{ secrets.docker_repo_password }}
+        username: ${{ inputs.docker-repo-username }}
+        password: ${{ inputs.docker-repo-password }}
     - name: Download artifact
       uses: actions/download-artifact@v2
       with:
