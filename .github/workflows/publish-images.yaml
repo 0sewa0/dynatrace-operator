@@ -103,8 +103,6 @@ jobs:
     with:
       platform: amd64
       version: ${{ needs.prepare.outputs.version }}
-      registry: scan.connect.redhat.com
-      repository: dynatrace/dynatrace-operator
 
   manifest:
     name: Create manifests
