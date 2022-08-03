@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: build-image
-        uses: ./.github/actions/build-image.yaml
+        uses: ./.github/actions/build-image
         with:
           platform: amd64
           go-version: ${{ needs.prepare.outputs.go-version }}
@@ -50,7 +50,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: build-image
-        uses: ./.github/actions/build-image.yaml
+        uses: ./.github/actions/build-image
         with:
           platform: arm64
           go-version: ${{ needs.prepare.outputs.go-version }}
@@ -86,7 +86,7 @@ jobs:
             password: DOCKERHUB_PASSWORD
     steps:
       - name: Push ${{matrix.platform}} to ${{matrix.registry}}
-        uses: ./.github/actions/upload-image.yaml
+        uses: ./.github/actions/upload-image
         with:
           platform: ${{matrix.platform}}
           labels: ${{ needs.prepare.outputs.labels }}
@@ -131,7 +131,7 @@ jobs:
             password: DOCKERHUB_PASSWORD
     steps:
       - name: Create manifests for ${{matrix.registry}}
-        uses: ./.github/actions/create-manifests.yaml
+        uses: ./.github/actions/create-manifests
         with:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ matrix.url }}

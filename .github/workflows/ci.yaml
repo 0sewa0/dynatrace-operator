@@ -121,7 +121,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: build-image
-        uses: ./.github/actions/build-image.yaml
+        uses: ./.github/actions/build-image
         with:
           platform: amd64
           go-version: ${{ needs.prepare.outputs.go-version }}
@@ -130,7 +130,7 @@ jobs:
           labels: ${{ needs.prepare.outputs.labels }}
           image-tag: ${{ needs.prepare.outputs.version }}
       - name: upload-image
-        uses: ./.github/actions/upload-image.yaml
+        uses: ./.github/actions/upload-image
         with:
           platform: amd64
           labels: ${{ needs.prepare.outputs.labels }}
@@ -140,7 +140,7 @@ jobs:
           docker-repo-username: ${{ secrets.QUAY_USERNAME }}
           docker-repo-password: ${{ secrets.QUAY_PASSWORD }}
       - name: create-manifests
-        uses: ./.github/actions/create-manifests.yaml
+        uses: ./.github/actions/create-manifests
         with:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ needs.prepare.outputs.registry }}
@@ -158,7 +158,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: build-image
-        uses: ./.github/actions/build-image.yaml
+        uses: ./.github/actions/build-image
         with:
           platform: arm64
           go-version: ${{ needs.prepare.outputs.go-version }}
@@ -167,7 +167,7 @@ jobs:
           labels: ${{ needs.prepare.outputs.labels }}
           image-tag: ${{ needs.prepare.outputs.version }}
       - name: upload-image
-        uses: ./.github/actions/upload-image.yaml
+        uses: ./.github/actions/upload-image
         with:
           platform: arm64
           labels: ${{ needs.prepare.outputs.labels }}
@@ -190,7 +190,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: create-manifests
-        uses: ./.github/actions/create-manifests.yaml
+        uses: ./.github/actions/create-manifests
         with:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ needs.prepare.outputs.registry }}
