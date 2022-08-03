@@ -30,35 +30,39 @@ jobs:
     runs-on: ubuntu-latest
     needs: [prepare]
     steps:
-     - name: build-image
-       uses: ./.github/actions/build-image.yaml
-       with:
-        platform: amd64
-        go-version: ${{ needs.prepare.outputs.go-version }}
-        go-linker-args: ${{ needs.prepare.outputs.go-linker-args }}
-        cgo-cflags: ${{ needs.prepare.outputs.cgo-cflags }}
-        labels: ${{ needs.prepare.outputs.labels }}
-        image-tag: ${{ needs.prepare.outputs.version }}
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: build-image
+        uses: ./.github/actions/build-image.yaml
+        with:
+          platform: amd64
+          go-version: ${{ needs.prepare.outputs.go-version }}
+          go-linker-args: ${{ needs.prepare.outputs.go-linker-args }}
+          cgo-cflags: ${{ needs.prepare.outputs.cgo-cflags }}
+          labels: ${{ needs.prepare.outputs.labels }}
+          image-tag: ${{ needs.prepare.outputs.version }}
 
   build-arm64:
     name: Build image arm64
     runs-on: ubuntu-latest
     needs: [prepare]
     steps:
-     - name: build-image
-       uses: ./.github/actions/build-image.yaml
-       with:
-        platform: arm64
-        go-version: ${{ needs.prepare.outputs.go-version }}
-        go-linker-args: ${{ needs.prepare.outputs.go-linker-args }}
-        cgo-cflags: ${{ needs.prepare.outputs.cgo-cflags }}
-        labels: ${{ needs.prepare.outputs.labels }}
-        image-tag: ${{ needs.prepare.outputs.version }}
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: build-image
+        uses: ./.github/actions/build-image.yaml
+        with:
+          platform: arm64
+          go-version: ${{ needs.prepare.outputs.go-version }}
+          go-linker-args: ${{ needs.prepare.outputs.go-linker-args }}
+          cgo-cflags: ${{ needs.prepare.outputs.cgo-cflags }}
+          labels: ${{ needs.prepare.outputs.labels }}
+          image-tag: ${{ needs.prepare.outputs.version }}
 
   push:
     name: Push images
     environment: Release
-    needs: [prepare,build-arm64,build-amd64]
+    needs: [prepare, build-arm64, build-amd64]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -108,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        registry: [ rhcc, gcr, dockerhub ]
+        registry: [rhcc, gcr, dockerhub]
         include:
           - registry: rhcc
             url: registry.connect.redhat.com
