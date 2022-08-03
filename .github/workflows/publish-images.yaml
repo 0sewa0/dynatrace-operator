@@ -68,18 +68,18 @@ jobs:
           - registry: rhcc
             url: scan.connect.redhat.com
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.RHCC_USERNAME }}
-            password: ${{ secrets.RHCC_PASSWORD }}
+            username: RHCC_USERNAME
+            password: RHCC_PASSWORD
           - registry: gcr
             url: gcr.io
             repository: dynatrace-marketplace-prod/dynatrace-operator
-            username: ${{ secrets.GCR_USERNAME }}
-            password: ${{ secrets.GCR_PASSWORD }}
+            username: GCR_USERNAME
+            password: GCR_PASSWORD
           - registry: dockerhub
             url: docker.io
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.DOCKERHUB_USERNAME }}
-            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+            username: DOCKERHUB_USERNAME
+            password: DOCKERHUB_PASSWORD
     steps:
       - name: Push ${{matrix.platform}} to ${{matrix.registry}}
         uses: ./.github/actions/upload-image.yaml
@@ -89,8 +89,8 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{matrix.url}}
           repository: ${{matrix.repository}}
-          docker-repo-username: ${{matrix.username}}
-          docker-repo-password: ${{matrix.password}}
+          docker-repo-username: ${{ secrets[matrix.username] }}
+          docker-repo-password: ${{ secrets[matrix.password] }}
 
   preflight:
     name: Validate image with RedHat's preflight tool
@@ -113,25 +113,25 @@ jobs:
           - registry: rhcc
             url: registry.connect.redhat.com
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.RHCC_USERNAME }}
-            password: ${{ secrets.RHCC_PASSWORD }}
+            username: RHCC_USERNAME
+            password: RHCC_PASSWORD
           - registry: gcr
             url: gcr.io
             repository: dynatrace-marketplace-prod/dynatrace-operator
-            username: ${{ secrets.GCR_USERNAME }}
-            password: ${{ secrets.GCR_PASSWORD }}
+            username: secrets.GCR_USERNAME
+            password: secrets.GCR_PASSWORD
           - registry: dockerhub
             url: docker.io
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.DOCKERHUB_USERNAME }}
-            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+            username: DOCKERHUB_USERNAME
+            password: DOCKERHUB_PASSWORD
     steps:
-      - name: create-manifests
+      - name: Create manifests for ${{matrix.registry}}
         uses: ./.github/actions/create-manifests.yaml
         with:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ matrix.url }}
           repository: ${{ matrix.repository }}
           combined: true
-          docker-repo-username: ${{ matrix.username }}
-          docker-repo-password: ${{ matrix.password }}
+          docker-repo-username: ${{ secrets[matrix.username] }}
+          docker-repo-password: ${{ secrets[matrix.password] }}
