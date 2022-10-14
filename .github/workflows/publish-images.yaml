@@ -76,7 +76,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
       - name: Login to Registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2
         with:
           registry: ${{ matrix.url }}
           username: ${{ secrets[matrix.username] }}
@@ -131,7 +131,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
       - name: Login to Registry
-        uses:  docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        uses:  docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2
         with:
           registry: ${{ matrix.url }}
           username: ${{ secrets[matrix.username] }}
