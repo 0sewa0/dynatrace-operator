@@ -22,9 +22,9 @@ require (
 	google.golang.org/grpc v1.49.0
 	istio.io/api v0.0.0-20220728184806-7837c4e62d82
 	istio.io/client-go v1.14.3
-	k8s.io/api v0.25.0
+	k8s.io/api v0.25.4
 	k8s.io/apiextensions-apiserver v0.25.0
-	k8s.io/apimachinery v0.25.0
+	k8s.io/apimachinery v0.25.4
 	k8s.io/client-go v0.25.0
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
 	sigs.k8s.io/controller-runtime v0.12.3
