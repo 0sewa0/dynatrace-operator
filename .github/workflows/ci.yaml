@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   DOCKER_REGISTRY: "quay.io"
@@ -166,6 +167,20 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ needs.prepare.outputs.registry }}
           repository: ${{ needs.prepare.outputs.repository }}
+      - name: Get image digest
+        if: matrix.platform != 'arm64' || github.ref_protected
+        id: digest
+        env:
+          IMAGE: ${{ needs.prepare.outputs.registry  }}/${{ needs.prepare.outputs.repository }}:${{ needs.prepare.outputs.version }}-${{ matrix.platform }}
+        run: |
+          hack/build/ci/get-image-digest.sh
+      - name: Sign image for ${{ needs.prepare.outputs.registry  }}
+        if: matrix.platform != 'arm64' || github.ref_protected
+        uses: ./.github/actions/sign-image
+        with:
+          image: ${{ needs.prepare.outputs.registry  }}/${{ needs.prepare.outputs.repository }}:${{ needs.prepare.outputs.version }}-${{ matrix.platform }}@${{steps.digest.outputs.digest}}
+          signing-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          signing-password: ${{ secrets.COSIGN_PASSWORD }}
 
   manifest:
     name: Create manifest
