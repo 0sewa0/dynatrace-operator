@@ -172,4 +172,3 @@ jobs:
           labels: ${{ needs.prepare.outputs.labels }}
           image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ needs.prepare.outputs.version }}
           annotation: "version=${{ needs.prepare.outputs.version }}"
-
