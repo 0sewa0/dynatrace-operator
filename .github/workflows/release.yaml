@@ -186,7 +186,7 @@ jobs:
         platforms: ${{ env.PLATFORMS }}
         provenance: false
         context: ./config/helm
-        file: ./Dockerfile
+        file: ./config/helm/Dockerfile
         push: true
         tags: ${{ env.IMAGE }},${{ env.IMAGE_NO_PREFIX }}
         annotations: ${{ env.GOOGLE_MARKETPLACE_ANNOTATION }}
