@@ -7,6 +7,7 @@ on:
 
 env:
   GOOGLE_MARKETPLACE_ANNOTATION: com.googleapis.cloudmarketplace.product.service.name=services/dynatrace-operator-dynatrace-marketplace-prod.cloudpartnerservices.goog
+  PLATFORMS: linux/amd64,linux/arm64,linux/ppc64le,linux/s390x
 
 jobs:
   prepare:
@@ -81,15 +82,15 @@ jobs:
         id: build-image
         uses: ./.github/actions/build-image
         with:
-          platform: linux/amd64,linux/arm64,linux/ppc64le,linux/s390x
+          platforms: ${{ env.PLATFORMS }}
           labels: ${{ needs.prepare.outputs.labels }}
-          image: ${{env.RHCC_IMAGE}},${{env.GCR_IMAGE}}
+          tags: ${{ env.RHCC_IMAGE }},${{ env.GCR_IMAGE }}
           annotation: ${{ env.GOOGLE_MARKETPLACE_ANNOTATION }}
     outputs:
       digest: ${{steps.build-image.outputs.digest}}
 
   signing:
-    name: Create Docker manifests
+    name: Sign the image index/manifests + Add SBOM
     environment: Release
     needs: [prepare, build]
     runs-on: ubuntu-latest
@@ -182,7 +183,7 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # 6.15.0
       with:
-        platforms: linux/amd64,linux/arm64,linux/ppc64le,linux/s390x
+        platforms: ${{ env.PLATFORMS }}
         provenance: false
         context: ./config/helm
         file: ./Dockerfile
@@ -193,7 +194,7 @@ jobs:
   # run-preflight-rhcc:
   #   name: Run preflight for rhcc
   #   environment: Release
-  #   needs: [ prepare, build, signing]
+  #   needs: [ prepare, build]
   #   runs-on: ubuntu-latest
   #   env:
   #     SCAN_REGISTRY: "quay.io"
