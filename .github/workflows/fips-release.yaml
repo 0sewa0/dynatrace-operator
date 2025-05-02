@@ -65,7 +65,7 @@ jobs:
         uses: ./.github/actions/build-push-image
         env:
             # ECR_IMAGE: public.ecr.aws/${{ secrets.ECR_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
-            DOCKER_IMAGE: docker.io/${{ secrets.DOCKERHUB_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
+            DOCKER_IMAGE: quay.io/${{ secrets.DOCKERHUB_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
         with:
           platforms: ${{ matrix.platform }}
           labels: ${{ needs.prepare.outputs.labels }}
@@ -83,7 +83,7 @@ jobs:
         registry: [dockerhub]
         include:
           - registry: dockerhub
-            url: docker.io
+            url: quay.io
             repository: DOCKERHUB_REPOSITORY
           # - registry: amazon-ecr
           #   url: public.ecr.aws
@@ -94,7 +94,7 @@ jobs:
       - name: Login to Docker
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: docker.io
+          registry: quay.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       # - name: Configure aws credentials
