@@ -52,24 +52,24 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Configure aws credentials
-        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
-        with:
-          role-to-assume: ${{ secrets.ECR_IMAGEPUSH_ROLE }}
-          aws-region: us-east-1
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
-        with:
-          registry-type: public
+      # - name: Configure aws credentials
+      #   uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
+      #   with:
+      #     role-to-assume: ${{ secrets.ECR_IMAGEPUSH_ROLE }}
+      #     aws-region: us-east-1
+      # - name: Login to Amazon ECR
+      #   uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+      #   with:
+      #     registry-type: public
       - name: Build ${{ matrix.platform }} image
         uses: ./.github/actions/build-push-image
         env:
-            ECR_IMAGE: public.ecr.aws/${{ secrets.ECR_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
+            # ECR_IMAGE: public.ecr.aws/${{ secrets.ECR_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
             DOCKER_IMAGE: docker.io/${{ secrets.DOCKERHUB_REPOSITORY }}:${{ needs.prepare.outputs.version }}-${{ matrix.image-postfix }}
         with:
           platforms: ${{ matrix.platform }}
           labels: ${{ needs.prepare.outputs.labels }}
-          tags: ${{ env.DOCKER_IMAGE }},${{ env.ECR_IMAGE }}
+          tags: ${{ env.DOCKER_IMAGE }}
           annotation: "version=${{ needs.prepare.outputs.version }}"
           dockerfile: ./fips.Dockerfile
 
@@ -80,14 +80,14 @@ jobs:
     environment: Release
     strategy:
       matrix:
-        registry: [dockerhub, amazon-ecr]
+        registry: [dockerhub]
         include:
           - registry: dockerhub
             url: docker.io
             repository: DOCKERHUB_REPOSITORY
-          - registry: amazon-ecr
-            url: public.ecr.aws
-            repository: ECR_REPOSITORY
+          # - registry: amazon-ecr
+          #   url: public.ecr.aws
+          #   repository: ECR_REPOSITORY
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -97,15 +97,15 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Configure aws credentials
-        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
-        with:
-          role-to-assume: ${{ secrets.ECR_IMAGEPUSH_ROLE }}
-          aws-region: us-east-1
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
-        with:
-          registry-type: public
+      # - name: Configure aws credentials
+      #   uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
+      #   with:
+      #     role-to-assume: ${{ secrets.ECR_IMAGEPUSH_ROLE }}
+      #     aws-region: us-east-1
+      # - name: Login to Amazon ECR
+      #   uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+      #   with:
+      #     registry-type: public
       - name: Create image-index manifest for ${{matrix.registry}}
         id: image-index
         env:
